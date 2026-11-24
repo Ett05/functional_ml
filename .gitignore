@@ -1,0 +1,20 @@
+# Cabal / GHC build artifacts
+dist-newstyle/
+dist/
+*.o
+*.hi
+*.dyn_o
+*.dyn_hi
+*.prof
+*.hp
+*.eventlog
+.ghc.environment.*
+
+# Cabal / Stack local files
+cabal.project.local*
+.stack-work/
+
+# OS / Editor files
+.DS_Store
+*.swp
+*~
