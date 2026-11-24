@@ -3,7 +3,8 @@ name:               functional-ml
 version:            0.1.0.0
 synopsis:           A purely functional machine learning and automatic differentiation library in Haskell
 description:        Demonstrates forward-mode (dual numbers) and reverse-mode (computational DAG)
-                    automatic differentiation, functional neural network layers, and optimizers.
+                    automatic differentiation, functional neural network layers, optimizers, and
+                    zero-copy Storable FFI kernels.
 license:            MIT
 author:             Girik Setya
 category:           Machine Learning, Functional Programming
@@ -20,6 +21,9 @@ common common-options
 library
     import:             common-options
     hs-source-dirs:     src
+    c-sources:          cbits/kernels.c
+    include-dirs:       cbits
+    cc-options:         -O3 -ffast-math -Wall
     exposed-modules:    FunctionalML
                       , FunctionalML.Core
                       , FunctionalML.Autograd.Dual
@@ -27,6 +31,7 @@ library
                       , FunctionalML.NN.Layers
                       , FunctionalML.NN.Loss
                       , FunctionalML.NN.Optim
+                      , FunctionalML.Tensor.Storable
 
 executable functional-ml-demo
     import:             common-options
@@ -34,3 +39,11 @@ executable functional-ml-demo
     main-is:            Main.hs
     build-depends:      functional-ml
     ghc-options:        -threaded -rtsopts -with-rtsopts=-N
+
+benchmark functional-ml-bench
+    import:             common-options
+    type:               exitcode-stdio-1.0
+    hs-source-dirs:     bench
+    main-is:            Main.hs
+    build-depends:      functional-ml
+    ghc-options:        -O2 -threaded -rtsopts -with-rtsopts=-N
