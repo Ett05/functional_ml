@@ -2,7 +2,7 @@
 import time
 import torch
 import torch.nn.functional as F
-from torch.func import vmap, value_and_grad
+from torch.func import vmap, grad_and_value
 
 torch.set_default_dtype(torch.float64)
 
@@ -35,16 +35,16 @@ def single_sample_loss(params: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -
     return torch.mean((pred - y) ** 2)
 
 
-vmap_vg = vmap(value_and_grad(single_sample_loss), in_dims=(None, 0, 0))
+vmap_vg = vmap(grad_and_value(single_sample_loss), in_dims=(None, 0, 0))
 
 
 def bench(fn, params, xs, ys, warmup=5, iters=25):
     for _ in range(warmup):
-        losses, grads = fn(params, xs, ys)
+        grads, losses = fn(params, xs, ys)
     times = []
     for _ in range(iters):
         t0 = time.perf_counter_ns()
-        losses, grads = fn(params, xs, ys)
+        grads, losses = fn(params, xs, ys)
         _ = losses.sum().item()
         t1 = time.perf_counter_ns()
         times.append((t1 - t0) / 1000.0)
