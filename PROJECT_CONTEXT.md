@@ -63,22 +63,29 @@ functional_ml/
 - [x] Conceptual & design documentation (`README.md`, `CONVERSATION.md`, `PROJECT_CONTEXT.md`).
 
 ### Left To Do (Roadmap)
-- [ ] **Contiguous Memory Representation:** Replace linked lists (`[Double]`, `[[Double]]`) with unboxed contiguous arrays (`Data.Vector.Unboxed` or flat `ByteArray`) for cache locality and speed.
+- [ ] **Contiguous Zero-Copy Memory (`Data.Vector.Storable`):** Replace linked lists (`[Double]`, `[[Double]]`) with `Storable` vectors so Haskell can pass raw `Ptr Double` / `Ptr Float` directly to custom kernels via FFI with zero copying.
+- [ ] **Fused Per-Sample Gradient Kernel (`vmap(valueAndGrad)`):** Compile/execute fused forward + backward passes in a single stateless C/SIMD (NEON on Apple Silicon) or Metal kernel, parallelized across samples via Haskell with zero tape allocation and zero data races.
+- [ ] **Head-to-Head PyTorch Benchmark Suite:** Benchmark `FunctionalML` (`tasty-bench`) against PyTorch (`torch.func.vmap(torch.func.grad(...))`, eager and `torch.compile`) on per-sample gradients and higher-order AD.
 - [ ] **Generic N-Dimensional Tensor:** Generalize 1D/2D operations to arbitrary-rank `Tensor` types with shapes and strides.
 - [ ] **Compile-Time Shape Safety:** Encode tensor dimensions in the type system using `DataKinds`, `GADTs`, and `TypeFamilies` (e.g. `matMul :: Tensor '[m, k] a -> Tensor '[k, n] a -> Tensor '[m, n] a`) so shape mismatches fail at compile time.
 - [ ] **PyTree / Generic Parameter Traversal:** Replace manual `flattenMLP` / `unflattenMLP` with a `PyTree` / `Functor`-like `treeMap` abstraction over arbitrary nested parameter records.
-- [ ] **Vectorized Map (`vmap`):** Lift single-sample model functions across batch dimensions automatically.
 - [ ] **Property-Based Testing (`QuickCheck`):** Verify `Dual` and `Reverse` gradients against numerical finite differences:
   $$f'(x) \approx \frac{f(x+h) - f(x-h)}{2h}$$
   and algebraic laws (linearity, product rule, chain rule).
 
 ---
 
-## 4. How to Benchmark
+## 4. Benchmarking Strategy & PyTorch Target
 
-Use **`tasty-bench`** or **`criterion`** (as a Cabal `benchmark` stanza) alongside GHC's built-in Runtime System (RTS) profiler.
+### Primary Competitive Target: `vmap(grad(loss))` (Per-Sample Gradients & Higher-Order AD)
+Rather than competing on large dense `MatMul` (where PyTorch delegates to vendor assembly like Apple Accelerate / MKL / cuBLAS), `FunctionalML` targets workloads where **FP composability + fused custom kernels** outperform PyTorch structurally—even with `torch.compile`:
+1. **Per-Sample Gradients (`vmap(valueAndGrad loss)`):** Core bottleneck in Differential Privacy (DP-SGD) and meta-learning. PyTorch relies on `torch.func.vmap(torch.func.grad(...))`, incurring graph-tracing overhead and memory expansion; pure FP composes `vmap . valueAndGrad` into a single parallel, tapeless fused kernel.
+2. **Kernel Fusion & Zero Dispatch Overhead:** Pure expressions fuse forward + backward chains into a single memory pass in C/NEON/Metal with near-zero dispatch overhead compared to PyTorch's per-op Python/C++ dispatcher.
 
-### Recommended Benchmarks
+### Execution Pipeline
+`Pure Haskell EDSL / Layers` → `Fused Forward + Backward Kernel (C / NEON / Metal)` → `Parallel Execution via Haskell FFI (Storable Ptr)`
+
+### Internal Micro-Benchmarks (`tasty-bench` / `criterion` + GHC RTS)
 1. **Forward-Mode vs. Reverse-Mode Scaling ($f : \mathbb{R}^N \to \mathbb{R}$):**
    * Scale input dimension $N \in \{10, 50, 100, 500, 1000\}$.
    * Forward AD (`diff` per input) scales as $O(N)$ passes; Reverse AD (`valueAndGradN`) computes all $N$ partial derivatives in $O(1)$ backward pass.
@@ -86,7 +93,7 @@ Use **`tasty-bench`** or **`criterion`** (as a Cabal `benchmark` stanza) alongsi
    * Evaluate $x_0 = x$, $x_{k+1} = x_k \cdot x_k$ for depth $K = 20$.
    * Verify runtime scales linearly ($20$ steps) rather than exponentially ($2^{20}$).
 3. **Training Throughput & Memory Allocation:**
-   * Run with GHC RTS statistics enabled to inspect total bytes allocated and GC pause overhead (crucial for comparing `[Double]` vs. `Data.Vector.Unboxed`):
+   * Run with GHC RTS statistics enabled to inspect total bytes allocated and GC pause overhead (crucial for measuring the speedup from `[Double]` to `Data.Vector.Storable`):
      ```bash
      cabal run -- +RTS -s
      ```

@@ -122,6 +122,15 @@ let output = mlpForward mlp [1.0, 0.0]
 
 ---
 
-## Learning Objectives & Further Roadmap
+## Roadmap & PyTorch Benchmark Target
 
+Our active goal is to benchmark `FunctionalML` against PyTorch on workloads where **pure FP composability + fused custom kernels** beat PyTorch's architecture:
+
+* **Primary Target:** `vmap(valueAndGrad)` (per-sample gradients for DP-SGD / meta-learning and higher-order AD) vs. PyTorch `torch.func.vmap(torch.func.grad(...))`.
+* **Next Engineering Steps:**
+  1. Migrate from `[Double]` to `Data.Vector.Storable` for zero-copy `Ptr` FFI interop.
+  2. Implement fused C/NEON (or Metal) per-sample forward+backward kernels orchestrated in parallel by Haskell.
+  3. Add a `tasty-bench` suite and head-to-head PyTorch comparison script.
+
+For the full project status and benchmarking plan, read **[PROJECT_CONTEXT.md](file:///Users/giriksetya/Desktop/Coding/functional_ml/PROJECT_CONTEXT.md)**.
 For the full design discussion, comparison between Haskell and OCaml, and why functional programming is the backbone of modern frameworks like JAX, read **[CONVERSATION.md](file:///Users/giriksetya/Desktop/Coding/functional_ml/CONVERSATION.md)**.
